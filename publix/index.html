@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>2D DbD Game - Advanced</title>
+  <style>
+    body { background: #1a1a1a; color: #fff; font-family: sans-serif; text-align: center; }
+    canvas { background: #2b2b2b; border: 3px solid #444; display: block; margin: 10px auto; }
+    #info { font-weight: bold; font-size: 1.2rem; margin: 10px; }
+  </style>
+</head>
+<body>
+  <h1>2D DbD (攻撃＆壁追加版)</h1>
+  <p>移動: 矢印キー | アクション(攻撃/修理/救出): Spaceキー</p>
+  <div id="info">接続中...</div>
+  <canvas id="gameCanvas" width="600" height="400"></canvas>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    
+    let myId = null;
+    let players = {};
+    let generatorProgress = 0;
+    let walls = [];
+    const generator = { x: 300, y: 200, radius: 20 };
+
+    const keys = { up: false, down: false, left: false, right: false, space: false };
+
+    window.addEventListener("keydown", e => {
+      if (e.key === "ArrowUp") keys.up = true;
+      if (e.key === "ArrowDown") keys.down = true;
+      if (e.key === "ArrowLeft") keys.left = true;
+      if (e.key === "ArrowRight") keys.right = true;
+      if (e.code === "Space") keys.space = true;
+    });
+
+    window.addEventListener("keyup", e => {
+      if (e.key === "ArrowUp") keys.up = false;
+      if (e.key === "ArrowDown") keys.down = false;
+      if (e.key === "ArrowLeft") keys.left = false;
+      if (e.key === "ArrowRight") keys.right = false;
+      if (e.code === "Space") keys.space = false;
+    });
+
+    socket.on("init", (data) => {
+      myId = data.id;
+      players = data.players;
+      generatorProgress = data.generatorProgress;
+      walls = data.walls;
+      const me = players[myId];
+      document.getElementById("info").innerText = 
+        `あなたは 【${me.role === "killer" ? "キラー (赤)" : "サバイバー (青)"}】 です`;
+    });
+
+    socket.on("stateUpdate", (data) => {
+      players = data.players;
+      generatorProgress = data.generatorProgress;
+    });
+
+    setInterval(() => {
+      if (!myId || !players[myId]) return;
+      
+      if (keys.up || keys.down || keys.left || keys.right) {
+        socket.emit("move", keys);
+      }
+      
+      if (keys.space) {
+        socket.emit("action");
+      }
+
+      draw();
+    }, 1000 / 30);
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#666";
+      walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
+
+      ctx.fillStyle = generatorProgress >= 100 ? "#00ff00" : "#ffff00";
+      ctx.beginPath();
+      ctx.arc(generator.x, generator.y, generator.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = "14px sans-serif";
+      ctx.fillText(`発電機: ${generatorProgress}%`, generator.x - 35, generator.y - 30);
+
+      Object.values(players).forEach(p => {
+        ctx.beginPath();
+        if (p.isDown) {
+          ctx.fillStyle = "#888888";
+          ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+        } else {
+          ctx.fillStyle = p.role === "killer" ? "#ff4444" : "#4488ff";
+          ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
+        }
+        ctx.fill();
+
+        if (p.isDown) {
+          ctx.fillStyle = "#ff0000";
+          ctx.fillText("DOWN!", p.x - 20, p.y - 15);
+        }
+      });
+    }
+  </script>
+</body>
+</html>
